@@ -1,0 +1,24 @@
+name: torch-env
+
+channels:
+  - pytorch  # Pytorch 官方的 conda channel，强烈推荐
+  - defaults
+  - conda-forge # 包含了许多默认频道没有的包
+
+dependencies:
+  # 1. 指定 Python 版本
+  - python=3.10
+
+  # 2. 指定 PyTorch 版本和其他核心库
+  # 注意：在 conda 中，包名是 pytorch
+  - pytorch=2.5.0
+
+  # 如果你需要特定GPU版本 (例如 CUDA 12.1), 你可以这样写：
+  # - pytorch=2.5.0=py3.10_cuda12.1_cudnn8_0
+  # - pytorch-cuda=12.1 
+  # 具体的版本号需要从 PyTorch 官网确认
+
+  # 3. 指定其他你需要的包
+  #- pandas
+  #- numpy
+  - jupyter
