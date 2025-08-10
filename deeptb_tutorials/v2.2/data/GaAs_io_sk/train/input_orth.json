@@ -14,19 +14,19 @@
         },
         "device": "cpu",
         "dtype": "float32",
-        "overlap": true,
+        "overlap": false,
         "seed": 3982377700
     },
     "train_options": {
         "num_epoch": 500,
         "batch_size": 1,
         "optimizer": {
-            "lr": 0.01,
+            "lr": 0.005,
             "type": "Adam"
         },
         "lr_scheduler": {
             "type": "exp",
-            "gamma": 0.997
+            "gamma": 0.999
         },
         "loss_options": {
             "train": {
@@ -59,9 +59,7 @@
                 "w": 0.2
             },
             "soc": {},
-            "freeze": [
-                "overlap"
-            ],
+            "freeze": false,
             "push": false,
             "std": 0.01,
             "atomic_radius": "cov"
