@@ -196,34 +196,41 @@ def install_deeptb(cuda_version, repo_cache=None):
     os.chdir('DeePTB')
     
     try:
-        os.system(f"uv sync --find-links {find_links_url}")
-        print("✅ DeePTB 依赖安装完成")
+        # 使用 --system 安装到系统环境, 解决 command not found 问题
+        # 同时也安装了所有依赖
+        install_cmd = f"uv pip install --system --find-links {find_links_url} -e ."
+        print(f"🚀 执行安装: {install_cmd}")
+        
+        ret = os.system(install_cmd)
+        if ret != 0:
+            raise Exception("uv pip install failed")
+            
+        print("✅ DeePTB 及依赖安装完成 (System Environment)")
+        
     except Exception as e:
         print(f"❌ UV安装失败: {e}")
         print("\n尝试备用安装方法...")
         os.system(f"pip install torch-scatter -f {find_links_url}")
         os.system("pip install -e .")
     
-    # 步骤4: 安装DeePTB到系统环境
-    print("\n[4/5] 安装 DeePTB 到系统环境...")
-    try:
-        os.system("uv pip install -e .")
-        print("✅ DeePTB 已安装到系统环境")
-    except:
-        print("⚠️  使用 uv run 模式")
-    
-    # 步骤5: 验证安装
-    print("\n[5/5] 验证安装...")
+    # 步骤4: 验证安装 (原步骤4已合并到步骤3)
+    print("\n[4/5] 验证安装...")
     ret = os.system("dptb --version 2>/dev/null")
     if ret != 0:
-        ret = os.system("uv run dptb --version 2>/dev/null")
+        # 再次尝试直接运行
+        print("⚠️  第一次验证失败, 尝试刷新环境...")
+        import site
+        site.main() 
+        ret = os.system("dptb --version")
+        
         if ret != 0:
             try:
                 sys.path.insert(0, os.getcwd())
                 import dptb
-                print(f"✅ DeePTB 版本: {dptb.__version__}")
+                print(f"✅ DeePTB 版本 (Import): {dptb.__version__}")
+                print("⚠️  注意: dptb 命令可能不可用, 请使用 python -m dptb")
             except:
-                print("⚠️  验证失败,但安装可能成功")
+                print("⚠️  验证失败, 但安装可能成功")
     
     # 返回原目录
     os.chdir(original_dir)
