@@ -128,6 +128,89 @@ def setup_drive_cache():
         return False, None
 
 
+def create_dptb_wrapper():
+    """创建 dptb 命令包装器"""
+    try:
+        wrapper_path = "/usr/local/bin/dptb"
+        
+        # 确保使用绝对路径
+        deeptb_root = os.path.abspath(os.path.join(os.getcwd(), "DeePTB"))
+        venv_bin = os.path.join(deeptb_root, ".venv", "bin")
+        dptb_exec = os.path.join(venv_bin, "dptb")
+        
+        # 验证路径是绝对路径
+        if not os.path.isabs(dptb_exec):
+            raise ValueError(f"路径不是绝对路径: {dptb_exec}")
+        
+        print(f"🔍 DeePTB 根目录: {deeptb_root}")
+        print(f"🔍 Venv 可执行路径: {dptb_exec}")
+        
+        # 检查可执行文件是否存在
+        if not os.path.exists(dptb_exec):
+            print(f"⚠️  未找到可执行文件: {dptb_exec}")
+            print("   尝试使用 python -m dptb 替代...")
+            python_exec = os.path.join(venv_bin, "python")
+            if not os.path.exists(python_exec):
+                raise FileNotFoundError(f"Python 解释器也不存在: {python_exec}")
+            dptb_exec = f'{python_exec} -m dptb'
+            
+        # 关键修复: 直接执行 venv 中的二进制文件，保留当前工作目录 (CWD)
+        # 这样用户在任意目录下运行 !dptb 都能正确找到相对路径的文件
+        script_content = f"""#!/bin/bash
+exec {dptb_exec} "$@"
+"""
+        with open("dptb_wrapper", "w") as f:
+            f.write(script_content)
+            
+        os.system(f"chmod +x dptb_wrapper")
+        ret = os.system(f"mv dptb_wrapper {wrapper_path}")
+        
+        if ret != 0:
+            print(f"⚠️  移动 wrapper 到 {wrapper_path} 失败，可能需要 sudo 权限")
+            return False
+            
+        print(f"✅ 创建命令包装器: {wrapper_path} -> {dptb_exec}")
+        return True
+    except Exception as e:
+        print(f"⚠️  创建命令包装器失败: {e}")
+        return False
+
+def inject_venv_path():
+    """将 venv 的包路径注入到系统环境"""
+    try:
+        # 获取 venv 的 site-packages 路径
+        # 我们通过运行 venv 里的 python 来获取
+        result = subprocess.run(
+            ["uv", "run", "python", "-c", "import site; print(site.getsitepackages()[0])"], 
+            capture_output=True, text=True, cwd="DeePTB"
+        )
+        
+        if result.returncode == 0:
+            venv_site_packages = result.stdout.strip()
+            print(f"🔍 Venv 库路径: {venv_site_packages}")
+            
+            # 1. 立即添加到当前进程 (用于验证)
+            if venv_site_packages not in sys.path:
+                sys.path.insert(0, venv_site_packages)
+            
+            # 2. 添加到系统 site-packages (通过 .pth 文件持久化)
+            # 找到系统 site-packages
+            import site
+            system_site = site.getsitepackages()[0]
+            pth_file = Path(system_site) / "deeptb_venv.pth"
+            
+            with open(pth_file, "w") as f:
+                f.write(venv_site_packages + "\n")
+                
+            print(f"✅ 注入路径到系统: {pth_file}")
+            return True
+        else:
+            print(f"⚠️  获取 venv 路径失败: {result.stderr}")
+            return False
+    except Exception as e:
+        print(f"⚠️  路径注入失败: {e}")
+        return False
+
 def install_deeptb(cuda_version, repo_cache=None):
     """安装DeePTB"""
     print_section("📦 开始安装 DeePTB")
@@ -173,7 +256,7 @@ def install_deeptb(cuda_version, repo_cache=None):
         except Exception as e:
             print(f"⚠️  更新缓存失败: {e}")
     
-    # 步骤3: 使用UV安装DeePTB
+    # 步骤3: 使用UV安装DeePTB (回归 uv sync 模式)
     print("\n[3/5] 使用 UV 安装 DeePTB 及依赖...")
     if os.environ.get('UV_CACHE_DIR'):
         print(f"🚀 使用缓存加速: {os.environ['UV_CACHE_DIR']}")
@@ -196,24 +279,27 @@ def install_deeptb(cuda_version, repo_cache=None):
     os.chdir('DeePTB')
     
     try:
-        # 使用 --system 安装到系统环境, 解决 command not found 问题
-        # 同时也安装了所有依赖
-        install_cmd = f"uv pip install --system --find-links {find_links_url} -e ."
-        print(f"🚀 执行安装: {install_cmd}")
+        # 使用标准的 uv sync
+        print("🚀 执行 uv sync...")
+        ret = os.system(f"uv sync --find-links {find_links_url}")
         
-        ret = os.system(install_cmd)
         if ret != 0:
-            raise Exception("uv pip install failed")
+            raise Exception("uv sync failed")
             
-        print("✅ DeePTB 及依赖安装完成 (System Environment)")
+        print("✅ DeePTB 依赖安装完成 (Virtual Environment)")
+        
+        # 关键步骤: 桥接 venv 和 系统环境
+        print("\n[3.5/5] 配置环境桥接...")
+        create_dptb_wrapper()
+        inject_venv_path()
         
     except Exception as e:
         print(f"❌ UV安装失败: {e}")
-        print("\n尝试备用安装方法...")
+        print("\n尝试备用安装方法 (Standard PIP)...")
         os.system(f"pip install torch-scatter -f {find_links_url}")
         os.system("pip install -e .")
     
-    # 步骤4: 验证安装 (原步骤4已合并到步骤3)
+    # 步骤4: 验证安装
     print("\n[4/5] 验证安装...")
     
     # 刷新导入缓存
@@ -222,33 +308,22 @@ def install_deeptb(cuda_version, repo_cache=None):
     site.main()
     importlib.invalidate_caches()
     
-    # 尝试运行命令
+    # 验证命令
     ret = os.system("dptb --version")
-    
     if ret != 0:
-        print("⚠️  'dptb' 命令未找到或运行失败，尝试使用标准 pip 修复...")
-        # Fallback: 使用标准 pip 重新安装 (不安装依赖，只注册包)
-        os.system("pip install --no-deps -e .")
-        
-        # 再次刷新
-        site.main()
-        ret = os.system("dptb --version")
-        
-        if ret != 0:
-            print("⚠️  命令行验证失败。尝试 Python 导入验证...")
-            try:
-                # 强制将当前目录加入 path
-                if os.getcwd() not in sys.path:
-                    sys.path.insert(0, os.getcwd())
-                
-                import dptb
-                print(f"✅ DeePTB 版本 (Import): {dptb.__version__}")
-                print("⚠️  注意: 如果 !dptb 命令不可用，请使用 %run -m dptb 或 python -m dptb")
-            except Exception as e:
-                print(f"❌ 验证彻底失败: {e}")
-                print("请尝试重启 Runtime (Runtime -> Restart runtime) 后再次运行。")
+        print("⚠️  'dptb' 命令验证失败 (Wrapper可能未生效)")
+        # 尝试直接调用
+        os.system("uv run dptb --version")
     else:
-        print("✅ 验证成功！dptb 命令可用。")
+        print("✅ 命令行工具验证成功")
+        
+    # 验证导入
+    try:
+        import dptb
+        print(f"✅ Python 导入验证成功: {dptb.__version__}")
+    except ImportError:
+        print("⚠️  Python 导入失败 (路径注入可能未生效)")
+        print("   请尝试重启 Runtime")
     
     # 返回原目录
     os.chdir(original_dir)
