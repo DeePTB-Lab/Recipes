@@ -294,16 +294,11 @@ def main():
     
     # 在线环境需要安装
     if (in_colab or in_binder) and not deeptb_installed:
-        # 尝试设置缓存 (仅Colab)
-        repo_cache = None
-        if in_colab:
-            use_cache, repo_cache = setup_drive_cache()
-            
+        # 尝试设置缓存 (仅Colab)          
         # 检测CUDA版本
         cuda_version = detect_cuda_version(in_colab)
-        
         # 安装DeePTB
-        install_deeptb(cuda_version, repo_cache)
+        install_deeptb(cuda_version)
         
         # 下载数据
         download_tutorial_data(in_colab, in_binder)
