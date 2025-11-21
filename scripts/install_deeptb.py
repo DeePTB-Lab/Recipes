@@ -215,22 +215,40 @@ def install_deeptb(cuda_version, repo_cache=None):
     
     # 步骤4: 验证安装 (原步骤4已合并到步骤3)
     print("\n[4/5] 验证安装...")
-    ret = os.system("dptb --version 2>/dev/null")
+    
+    # 刷新导入缓存
+    import site
+    import importlib
+    site.main()
+    importlib.invalidate_caches()
+    
+    # 尝试运行命令
+    ret = os.system("dptb --version")
+    
     if ret != 0:
-        # 再次尝试直接运行
-        print("⚠️  第一次验证失败, 尝试刷新环境...")
-        import site
-        site.main() 
+        print("⚠️  'dptb' 命令未找到或运行失败，尝试使用标准 pip 修复...")
+        # Fallback: 使用标准 pip 重新安装 (不安装依赖，只注册包)
+        os.system("pip install --no-deps -e .")
+        
+        # 再次刷新
+        site.main()
         ret = os.system("dptb --version")
         
         if ret != 0:
+            print("⚠️  命令行验证失败。尝试 Python 导入验证...")
             try:
-                sys.path.insert(0, os.getcwd())
+                # 强制将当前目录加入 path
+                if os.getcwd() not in sys.path:
+                    sys.path.insert(0, os.getcwd())
+                
                 import dptb
                 print(f"✅ DeePTB 版本 (Import): {dptb.__version__}")
-                print("⚠️  注意: dptb 命令可能不可用, 请使用 python -m dptb")
-            except:
-                print("⚠️  验证失败, 但安装可能成功")
+                print("⚠️  注意: 如果 !dptb 命令不可用，请使用 %run -m dptb 或 python -m dptb")
+            except Exception as e:
+                print(f"❌ 验证彻底失败: {e}")
+                print("请尝试重启 Runtime (Runtime -> Restart runtime) 后再次运行。")
+    else:
+        print("✅ 验证成功！dptb 命令可用。")
     
     # 返回原目录
     os.chdir(original_dir)
