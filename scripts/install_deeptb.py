@@ -92,42 +92,6 @@ def detect_cuda_version(in_colab):
     return cuda_version
 
 
-def setup_drive_cache():
-    """设置Google Drive缓存"""
-    try:
-        # 检查是否在Colab
-        if 'google.colab' not in sys.modules:
-            return False, None
-
-        print_section("💾 Google Drive 缓存设置")
-        print("是否挂载 Google Drive 以缓存安装文件？(推荐)")
-        print("这样可以显著加快下次运行速度 (5-7分钟 -> 30秒)")
-        
-        # 简单的超时输入或默认尝试挂载
-        # 在Colab中,drive.mount会弹出授权窗口
-        from google.colab import drive
-        drive.mount('/content/drive')
-        
-        cache_root = Path('/content/drive/MyDrive/DeePTB_Colab_Cache')
-        cache_root.mkdir(parents=True, exist_ok=True)
-        
-        # 1. 配置 UV Cache
-        uv_cache = cache_root / 'uv_cache'
-        uv_cache.mkdir(exist_ok=True)
-        os.environ['UV_CACHE_DIR'] = str(uv_cache)
-        print(f"✅ UV Cache 已配置: {uv_cache}")
-        
-        # 2. 配置 Repo Cache
-        repo_cache = cache_root / 'DeePTB_Repo'
-        
-        return True, repo_cache
-        
-    except Exception as e:
-        print(f"⚠️  Google Drive 挂载跳过或失败: {e}")
-        print("   将使用临时环境运行 (无缓存)...")
-        return False, None
-
-
 def create_dptb_wrapper():
     """创建 dptb 命令包装器"""
     try:
@@ -211,7 +175,7 @@ def inject_venv_path():
         print(f"⚠️  路径注入失败: {e}")
         return False
 
-def install_deeptb(cuda_version, repo_cache=None):
+def install_deeptb(cuda_version):
     """安装DeePTB"""
     print_section("📦 开始安装 DeePTB")
     
@@ -222,47 +186,15 @@ def install_deeptb(cuda_version, repo_cache=None):
     
     # 步骤2: 克隆DeePTB仓库
     print("\n[2/5] 克隆 DeePTB 仓库...")
-    
-    # 检查是否有缓存的Repo
-    use_cached_repo = False
-    if repo_cache and repo_cache.exists():
-        print(f"📦 发现缓存的仓库: {repo_cache}")
-        try:
-            # 如果本地不存在,从缓存复制
-            if not Path('DeePTB').exists():
-                print("   正在从缓存恢复仓库...")
-                import shutil
-                shutil.copytree(repo_cache, 'DeePTB')
-                print("✅ 从缓存恢复完成")
-            use_cached_repo = True
-        except Exception as e:
-            print(f"⚠️  恢复缓存失败: {e}, 将重新克隆")
-            
     if not Path('DeePTB').exists():
         os.system("git clone -q https://github.com/deepmodeling/DeePTB.git")
         print("✅ 仓库克隆完成")
     else:
         print("✅ DeePTB 仓库已存在")
-        
-    # 如果使用了缓存且成功安装,更新缓存
-    if repo_cache and not use_cached_repo and Path('DeePTB').exists():
-        try:
-            print("💾 更新仓库缓存...")
-            import shutil
-            if repo_cache.exists():
-                shutil.rmtree(repo_cache)
-            shutil.copytree('DeePTB', repo_cache, ignore=shutil.ignore_patterns('.git', '.venv', '__pycache__'))
-            print("✅ 仓库缓存已更新")
-        except Exception as e:
-            print(f"⚠️  更新缓存失败: {e}")
     
-    # 步骤3: 使用UV安装DeePTB (回归 uv sync 模式)
+    # 步骤3: 使用UV安装DeePTB (纯 uv sync 模式)
     print("\n[3/5] 使用 UV 安装 DeePTB 及依赖...")
-    if os.environ.get('UV_CACHE_DIR'):
-        print(f"🚀 使用缓存加速: {os.environ['UV_CACHE_DIR']}")
-    else:
-        print("⏳ 这可能需要几分钟,请耐心等待...")
-        
+    print("⏳ 这可能需要几分钟,请耐心等待...")
     print("   正在安装:")
     print("   - PyTorch")
     print("   - torch_scatter")
@@ -362,16 +294,11 @@ def main():
     
     # 在线环境需要安装
     if (in_colab or in_binder) and not deeptb_installed:
-        # 尝试设置缓存 (仅Colab)
-        repo_cache = None
-        if in_colab:
-            use_cache, repo_cache = setup_drive_cache()
-            
         # 检测CUDA版本
         cuda_version = detect_cuda_version(in_colab)
         
         # 安装DeePTB
-        install_deeptb(cuda_version, repo_cache)
+        install_deeptb(cuda_version)
         
         # 下载数据
         download_tutorial_data(in_colab, in_binder)
