@@ -146,7 +146,7 @@ def inject_venv_path():
         # 我们通过运行 venv 里的 python 来获取
         result = subprocess.run(
             ["uv", "run", "python", "-c", "import site; print(site.getsitepackages()[0])"], 
-            capture_output=True, text=True, cwd="DeePTB"
+            capture_output=True, text=True
         )
         
         if result.returncode == 0:
