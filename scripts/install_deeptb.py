@@ -98,7 +98,7 @@ def create_dptb_wrapper():
         wrapper_path = "/usr/local/bin/dptb"
         
         # 确保使用绝对路径
-        deeptb_root = os.path.abspath(os.path.join(os.getcwd(), "DeePTB"))
+        deeptb_root = os.path.abspath((os.getcwd()))
         venv_bin = os.path.join(deeptb_root, ".venv", "bin")
         dptb_exec = os.path.join(venv_bin, "dptb")
         
@@ -294,11 +294,16 @@ def main():
     
     # 在线环境需要安装
     if (in_colab or in_binder) and not deeptb_installed:
+        # 尝试设置缓存 (仅Colab)
+        repo_cache = None
+        if in_colab:
+            use_cache, repo_cache = setup_drive_cache()
+            
         # 检测CUDA版本
         cuda_version = detect_cuda_version(in_colab)
         
         # 安装DeePTB
-        install_deeptb(cuda_version)
+        install_deeptb(cuda_version, repo_cache)
         
         # 下载数据
         download_tutorial_data(in_colab, in_binder)
